@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import androidx.appcompat.app.AppCompatActivity
 import com.techyourchance.dagger2course.Constants
 import com.techyourchance.dagger2course.networking.StackoverflowApi
+import com.techyourchance.dagger2course.questions.FetchQuestionsUseCase
 import com.techyourchance.dagger2course.questions.Question
 import com.techyourchance.dagger2course.screens.common.dialogs.ServerErrorDialogFragment
 import com.techyourchance.dagger2course.screens.questiondetails.QuestionDetailsActivity
@@ -18,11 +19,18 @@ class QuestionsListActivity : AppCompatActivity() , QuestionsListViewMvc.Listene
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 
-    private lateinit var stackoverflowApi: StackoverflowApi
 
     private var isDataLoaded = false
 
     private lateinit var viewMvc: QuestionsListViewMvc
+
+    /**
+     * Instantiate the [FetchQuestionsUseCase] to use it's functions in the app
+     * i used [lazy] because kotln asked for getter.
+     */
+    val fetchQuestionsUseCase by lazy {
+        FetchQuestionsUseCase()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,12 +38,10 @@ class QuestionsListActivity : AppCompatActivity() , QuestionsListViewMvc.Listene
 
         setContentView(viewMvc.rootView) //getting the view from viewMvc
 
-        // init retrofit
-        val retrofit = Retrofit.Builder()
-                .baseUrl(Constants.BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
-        stackoverflowApi = retrofit.create(StackoverflowApi::class.java)
+//        fetchQuestionsUseCase = FetchQuestionsUseCase()
+
+
+
     }
 
     override fun onStart() {
@@ -55,21 +61,23 @@ class QuestionsListActivity : AppCompatActivity() , QuestionsListViewMvc.Listene
     private fun fetchQuestions() {
         coroutineScope.launch {
             viewMvc.showProgressIndication()
-            try {
-                val response = stackoverflowApi.lastActiveQuestions(20)
-                if (response.isSuccessful && response.body() != null) {
-                    viewMvc.bindQuestions(response.body()!!.questions)
+
+           try {
+            /**
+             * applying the functionality from [fetchQuestionsUseCase]
+             */
+           val result = fetchQuestionsUseCase.fetchLatestQuestions()
+            when(result){
+                is FetchQuestionsUseCase.Result.Success ->{
+                    viewMvc.bindQuestions(result.questions)
                     isDataLoaded = true
-                } else {
-                    onFetchFailed()
                 }
-            } catch (t: Throwable) {
-                if (t !is CancellationException) {
-                    onFetchFailed()
-                }
-            } finally {
-                viewMvc.hideProgressIndication()
+                is FetchQuestionsUseCase.Result.Failure -> onFetchFailed()
             }
+        }finally {
+               viewMvc.hideProgressIndication()
+
+           }
         }
     }
 
